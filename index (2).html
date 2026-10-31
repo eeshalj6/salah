@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Salah Tracker</title>
+<style>
+:root{--bg:#f6f4ee;--card:#fff;--text:#1f2a24;--muted:#6b756f;--line:#e3e0d6;--green:#2f7d5b;--greenbg:#dff1e7;--amber:#b7791f;--amberbg:#fbeccd;--red:#b3402f;--redbg:#f8dcd6;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#141a17;--card:#1d2621;--text:#e8efe9;--muted:#93a198;--line:#2c3a33;--green:#5fcf9a;--greenbg:#1e3a2d;--amber:#e8b45a;--amberbg:#3d3118;--red:#f08a77;--redbg:#40211c;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+main{max-width:560px;margin:0 auto;padding:16px}
+h1{font-size:1.3rem;margin:4px 0 12px;text-align:center}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.nav button,.btn{background:var(--card);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:8px 14px;font-size:1rem;cursor:pointer}
+.nav button:disabled{opacity:.35;cursor:default}
+.nav .d{text-align:center;font-weight:600}
+.nav .d small{display:block;color:var(--muted);font-weight:400}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:14px}
+.card h2{font-size:1rem;margin:0 0 2px;display:flex;justify-content:space-between;align-items:baseline}
+.card h2 span{font-size:.8rem;color:var(--muted);font-weight:400}
+.row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line);flex-wrap:wrap}
+.row:first-of-type{border-top:0}
+.pn{font-weight:600;min-width:64px}
+.opts{display:flex;gap:6px}
+.opts button{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:999px;padding:6px 10px;font-size:.82rem;cursor:pointer}
+.opts button.on.ontime{background:var(--greenbg);color:var(--green);border-color:var(--green)}
+.opts button.on.madeup{background:var(--amberbg);color:var(--amber);border-color:var(--amber)}
+.opts button.on.missed{background:var(--redbg);color:var(--red);border-color:var(--red)}
+.pill{font-size:.82rem;padding:4px 10px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.pill.ontime{background:var(--greenbg);color:var(--green);border-color:var(--green)}
+.pill.madeup{background:var(--amberbg);color:var(--amber);border-color:var(--amber)}
+.pill.missed{background:var(--redbg);color:var(--red);border-color:var(--red)}
+.legend{font-size:.8rem;color:var(--muted);text-align:center;margin:4px 0 8px}
+.msg{text-align:center;color:var(--muted);padding:16px 8px}
+label{display:block;font-size:.85rem;color:var(--muted);margin:10px 0 4px}
+input{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:1rem}
+.foot{text-align:center;font-size:.78rem;color:var(--muted)}
+.foot a{color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+  <h1>🕌 Salah Tracker</h1>
+  <div id="app"></div>
+  <div class="foot" id="foot"></div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+// ====== PASTE YOUR FIREBASE CONFIG HERE (see setup steps) ======
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyD3A27q4y5B1gUAfgu4yNfVv76k0QlYU20",
+  authDomain: "salah-tracker-277.firebaseapp.com",
+  projectId: "salah-tracker-277",
+  storageBucket: "salah-tracker-277.firebasestorage.app",
+  messagingSenderId: "9586336076",
+  appId: "1:9586336076:web:256cea1bbe523d4974afe9",
+  measurementId: "G-F8576G8RMQ"
+};
+// ================================================================
+
+(function(){
+  var PRAYERS=[["fajr","Fajr"],["dhuhr","Dhuhr"],["asr","Asr"],["maghrib","Maghrib"],["isha","Isha"]];
+  var OPTS=[["ontime","✓ On time"],["madeup","↻ Made up"],["missed","✗ Missed"]];
+  var LABEL={ontime:"✓ On time",madeup:"↻ Made up",missed:"✗ Missed"};
+  var $=function(id){return document.getElementById(id)};
+  var app=$("app");
+  function ymd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+  function shift(s,n){var p=s.split("-");return ymd(new Date(+p[0],+p[1]-1,+p[2]+n))}
+  function load(k){try{return localStorage.getItem(k)||""}catch(e){return ""}}
+  function save(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+  function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+
+  if(!FIREBASE_CONFIG.apiKey||FIREBASE_CONFIG.apiKey==="PASTE_HERE"){
+    app.appendChild(el("div","card msg","Firebase isn’t set up yet. Paste your Firebase config at the top of index.html."));
+    return;
+  }
+  firebase.initializeApp(FIREBASE_CONFIG);
+  var fs=firebase.firestore();
+
+  var room=load("salah_room"),me=load("salah_name");
+  var today=ymd(new Date()),date=today,docs={},unsub=null,mine={};
+
+  function setup(){
+    app.textContent="";
+    var c=el("div","card");
+    c.appendChild(el("h2",null,"Get started"));
+    c.appendChild(el("label",null,"Your name"));
+    var n=el("input");n.value=me;n.placeholder="e.g. Ahmed";c.appendChild(n);
+    c.appendChild(el("label",null,"Shared room code (use the same one on both phones)"));
+    var r=el("input");r.value=room;r.placeholder="e.g. ahmed-sara-7391";c.appendChild(r);
+    c.appendChild(el("div","msg","Pick a long, hard-to-guess code. Anyone with it can see your log."));
+    var b=el("button","btn","Start");
+    b.onclick=function(){
+      var nn=n.value.trim(),rr=r.value.trim().toLowerCase().replace(/[^a-z0-9-]/g,"");
+      if(!nn||rr.length<6){alert("Enter your name and a room code of at least 6 letters/numbers.");return}
+      me=nn;room=rr;save("salah_name",me);save("salah_room",room);start();
+    };
+    c.appendChild(b);app.appendChild(c);
+  }
+
+  function count(o){var n=0;PRAYERS.forEach(function(p){if(o&&(o[p[0]]==="ontime"||o[p[0]]==="madeup"))n++});return n}
+
+  function card(name,o,editable){
+    var c=el("div","card");
+    var h=el("h2");h.appendChild(el("b",null,editable?name+" (you)":name));h.appendChild(el("span",null,count(o)+"/5 prayed"));c.appendChild(h);
+    PRAYERS.forEach(function(p){
+      var r=el("div","row");r.appendChild(el("div","pn",p[1]));
+      if(editable){
+        var g=el("div","opts");
+        OPTS.forEach(function(op){
+          var b=el("button",op[0]+(o[p[0]]===op[0]?" on":""),op[1]);
+          b.onclick=function(){setPrayer(p[0],o[p[0]]===op[0]?null:op[0])};
+          g.appendChild(b);
+        });
+        r.appendChild(g);
+      }else{
+        var v=o[p[0]];r.appendChild(el("span","pill"+(v?" "+v:""),v?LABEL[v]:"—"));
+      }
+      c.appendChild(r);
+    });
+    return c;
+  }
+
+  function render(){
+    app.textContent="";
+    var nav=el("div","nav");
+    var prev=el("button",null,"‹"),next=el("button",null,"›");
+    var d=el("div","d");
+    var p=date.split("-"),dt=new Date(+p[0],+p[1]-1,+p[2]);
+    d.appendChild(el("span",null,dt.toLocaleDateString(undefined,{weekday:"long",day:"numeric",month:"short"})));
+    d.appendChild(el("small",null,date===today?"Today":""));
+    next.disabled=date>=today;
+    prev.onclick=function(){date=shift(date,-1);docs={};mine={};render();subscribe()};
+    next.onclick=function(){if(date<today){date=shift(date,1);docs={};mine={};render();subscribe()}};
+    nav.appendChild(prev);nav.appendChild(d);nav.appendChild(next);app.appendChild(nav);
+
+    app.appendChild(card(me,mine,true));
+    var others=Object.keys(docs).filter(function(k){return docs[k].name!==me});
+    if(others.length)others.forEach(function(k){app.appendChild(card(docs[k].name,docs[k],false))});
+    else app.appendChild(el("div","card msg","Your partner hasn’t logged anything for this day yet."));
+    app.appendChild(el("div","legend","✓ On time · ↻ Made up same day · ✗ Missed"));
+    var f=$("foot");f.textContent="Room: "+room+" · ";
+    var a=el("a",null,"change name/room");a.href="#";a.onclick=function(e){e.preventDefault();if(unsub)unsub();setup()};f.appendChild(a);
+  }
+
+  function col(){return fs.collection("rooms").doc(room).collection("entries")}
+
+  function subscribe(){
+    if(unsub){unsub();unsub=null}
+    var d=date;
+    unsub=col().where("date","==",d).onSnapshot(function(snap){
+      if(d!==date)return;
+      var next={};
+      snap.forEach(function(x){next[x.id]=x.data()});
+      docs=next;
+      mine=docs[d+"_"+me]||{};
+      render();
+    },function(e){app.appendChild(el("div","card msg","Can’t reach the database: "+e.message))});
+  }
+
+  var busy=false;
+  function setPrayer(key,val){
+    if(busy)return;busy=true;
+    var cur=Object.assign({},mine);
+    if(val)cur[key]=val;else delete cur[key];
+    cur.date=date;cur.name=me;
+    mine=cur;docs[date+"_"+me]=cur;render();
+    col().doc(date+"_"+me).set(cur).catch(function(e){alert("Couldn’t save: "+e.message)}).then(function(){busy=false});
+  }
+
+  function start(){render();subscribe()}
+  if(room&&me)start();else setup();
+})();
+</script>
+</body>
+</html>
